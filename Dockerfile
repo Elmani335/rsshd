@@ -1,18 +1,32 @@
-FROM alpine:3.16.3
-LABEL org.opencontainers.image.authors="Emmanuel Frecon <efrecon@gmail.com>"
+# Use a compatible version of Node.js that meets Wetty's requirements
+FROM node:18-alpine as builder
 
-# Update the package list and upgrade existing packages
-RUN apk update && apk upgrade
+# Install build dependencies for native modules
+RUN apk add --no-cache make g++ python3
 
-# Install the necessary packages
-RUN apk add --no-cache openssh shellinabox openssl
+# Optionally update npm to the latest version
+RUN npm install -g npm@latest
 
-COPY sshd.sh /usr/local/bin/
+# Install Wetty globally
+RUN npm install -g wetty
 
-# Expose the Shell In A Box port (HTTPS by default uses 443)
-EXPOSE 443
+# Build stage for customizations (if any)
 
-# Volume for SSL certificates, keys, and SSH host keys
-VOLUME /etc/ssh/keys /etc/ssl/private /etc/ssl/certs
+FROM node:16-alpine
 
-ENTRYPOINT ["/usr/local/bin/sshd.sh"]
+# Copy Wetty from the builder stage
+COPY --from=builder /usr/local/lib/node_modules /usr/local/lib/node_modules
+COPY --from=builder /usr/local/bin /usr/local/bin
+
+# Install openssh and openssl
+RUN apk add --no-cache openssh openssl \
+    && echo "root:root" | chpasswd
+
+# Generate a self-signed certificate (or use your own)
+RUN openssl req -x509 -newkey rsa:4096 -keyout /etc/ssl/private/wetty.key -out /etc/ssl/certs/wetty.crt -days 365 -nodes -subj '/CN=localhost'
+
+# Expose Wetty's default port
+EXPOSE 3000
+
+# Run Wetty with the specified configuration
+CMD ["wetty", "-p", "3000", "--ssh-host", "localhost", "--ssh-user", "root", "--ssh-auth", "password"]
