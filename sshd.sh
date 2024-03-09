@@ -1,18 +1,12 @@
-FROM alpine:3.16.3
-LABEL org.opencontainers.image.authors="Emmanuel Frecon <efrecon@gmail.com>"
+#!/usr/bin/env ash
 
-RUN apk --update add openssh shellinabox openssl \
-    && rm -rf /var/cache/apk/*
+# Your existing setup script content...
 
-# Generate a self-signed certificate (You might want to use your own certificates)
-RUN openssl req -x509 -newkey rsa:4096 -keyout /etc/ssl/private/shellinabox.key -out /etc/ssl/certs/shellinabox.crt -days 365 -nodes -subj '/CN=localhost'
+# Start the SSH service in the background
+/usr/sbin/sshd -f ${SDIR}/sshd_config -D -e "$@" &
 
-COPY sshd.sh /usr/local/bin/
+# Start Shell In A Box to serve SSH over HTTPS. Adjust certificate and key paths as needed.
+shellinaboxd --cert=/etc/ssl/certs --disable-ssl-menu -s /:SSH:localhost &
 
-# Expose the Shell In A Box port (HTTPS by default uses 443)
-EXPOSE 443
-
-# Volume for SSL certificates, keys, and SSH host keys
-VOLUME /etc/ssh/keys /etc/ssl/private /etc/ssl/certs
-
-ENTRYPOINT /usr/local/bin/sshd.sh
+# Keep the container running
+wait
